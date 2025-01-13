@@ -185,9 +185,19 @@ func (k *AuthKey) ProcessRequest(_ http.ResponseWriter, r *http.Request, _ inter
 }
 
 func (k *AuthKey) reportInvalidKey(key string, r *http.Request, msg string, errMsg string) (error, int) {
+	hashKeys := k.Gw.GetConfig().HashKeys
+	obfuscatedKey := k.Gw.obfuscateKey(key)
+	hashedKey := storage.HashKey(key, hashKeys)
+
+	attributes := []otel.SpanAttribute{otel.APIKeyAliasAttribute(obfuscatedKey)}
+	if hashKeys {
+		attributes = append(attributes, otel.APIKeyAttribute(hashedKey))
+	}
+	ctxSetSpanAttributes(r, k.Name(), attributes...)
+
 	k.Logger().
-		WithField("key", k.Gw.obfuscateKey(key)).
-		WithField("key_hashed", storage.HashKey(key, k.Gw.GetConfig().HashKeys)).
+		WithField("key", obfuscatedKey).
+		WithField("key_hashed", hashedKey).
 		Info(msg)
 
 	// Fire Authfailed Event
